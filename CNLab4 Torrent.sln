@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30717.126
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4 Server", "CNLab4 Server\CNLab4 Server.csproj", "{B4F6E29C-6401-423E-8AC0-0D898E923D15}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4 Client", "CNLab4 Client\CNLab4 Client.csproj", "{1AF355A3-8AFF-4165-B78A-4AECC7FDD3A3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B4F6E29C-6401-423E-8AC0-0D898E923D15}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4F6E29C-6401-423E-8AC0-0D898E923D15}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4F6E29C-6401-423E-8AC0-0D898E923D15}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4F6E29C-6401-423E-8AC0-0D898E923D15}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1AF355A3-8AFF-4165-B78A-4AECC7FDD3A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1AF355A3-8AFF-4165-B78A-4AECC7FDD3A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1AF355A3-8AFF-4165-B78A-4AECC7FDD3A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1AF355A3-8AFF-4165-B78A-4AECC7FDD3A3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A9E1F21C-E5E8-4C11-BB4B-23CD396CCCC9}
+	EndGlobalSection
+EndGlobal
