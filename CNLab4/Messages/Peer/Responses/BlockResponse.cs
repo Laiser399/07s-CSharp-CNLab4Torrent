@@ -9,5 +9,10 @@ namespace CNLab4.Messages.Peer.Responses
     public class BlockResponse : BasePeerResponse
     {
         public Block Block;
+
+        public static implicit operator BlockResponse(Block block)
+        {
+            return new BlockResponse { Block = block };
+        }
     }
 }

@@ -63,29 +63,100 @@ namespace CNLab4_Client.GUI
         {
             _owner = owner;
             StartListenAsync();
+            UpdateSpeedsLoopAsync();
+
+            MakeTestAsync();
+        }
+
+        private async void MakeTestAsync()
+        {
+            await Task.Delay(1000);
+            // TODO Test delete
+            if (General.PeerPort == 59001)
+            {
+                await RegisterTorrentDir(@"D:\Downloads\Monty.Pythons.Flying.Circus.S01.1080p.BluRay.2xRus.Eng");
+            }
+            else
+            {
+                Func<string, bool> validator = (value) => value.Length > 0;
+                var dialog = new InputDialog
+                {
+                    TitleText = "Access code:",
+                    InputValidator = validator
+                };
+                dialog.Owner = _owner;
+                if (dialog.ShowDialog() == true)
+                {
+                    string dir;
+                    switch (General.PeerPort)
+                    {
+                        case 59002:
+                            dir = @"D:\Downloads\__2";
+                            break;
+                        case 59003:
+                            dir = @"D:\Downloads\__3";
+                            break;
+                        default:
+                            dir = @"D:\Downloads\__4";
+                            break;
+                    }
+                    await AddTorrent(dialog.InputText, dir);
+                }
+            }
+        }
+
+        private async void UpdateSpeedsLoopAsync()
+        {
+            while (true)
+            {
+                foreach (var torrent in Torrents)
+                    torrent.UpdateSpeeds();
+                await Task.Delay(1_000);
+            }
         }
 
         private async void StartListenAsync()
         {
+            int maxClientConnections = 5;
+            int connectedCount = 0;
+
             TcpListener listener = new TcpListener(IPAddress.Any, General.PeerPort);
             listener.Start();
             while (true)
             {
                 TcpClient client = await listener.AcceptTcpClientAsync();
-                await OnClientAcceptedAsync(client);
+                if (connectedCount >= maxClientConnections)
+                {
+                    client.Close();
+                    continue;
+                }
+                else
+                {
+                    connectedCount++;
+                    OnClientAcceptedAsync(client).ContinueWith(task => connectedCount--);
+                }
             }
         }
 
         private async Task OnClientAcceptedAsync(TcpClient client)
         {
-            using (client)
+            try
             {
-                NetworkStream stream = client.GetStream();
+                using (client)
+                {
+                    NetworkStream stream = client.GetStream();
 
-                BasePeerRequest request = await stream.ReadMessageAsync<BasePeerRequest>();
-                if (request is GetBlocks getBlocks)
-                    await OnRequest(getBlocks, stream);
+                    BasePeerRequest request = await stream.ReadMessageAsync<BasePeerRequest>();
+                    if (request is GetBlocks getBlocks)
+                        await OnRequest(getBlocks, stream);
+                }
             }
+            catch (Exception e)
+            {
+                General.Log("TcpClient exception",
+                    $"\tMessage: {e.Message}");
+            }
+            
         }
 
         private async Task OnRequest(GetBlocks request, NetworkStream stream)
@@ -102,26 +173,32 @@ namespace CNLab4_Client.GUI
                 TorrentFileVM file = torrent.Files[fIndex];
                 foreach (int bIndex in blocks.BlocksIndices)
                 {
-                    if (file.IsDone(bIndex))
+                    if (!file.IsDone(bIndex))
+                        continue;
+
+                    byte[] data = await file.TryReadAsync(bIndex);
+                    if (data is null)
                     {
-                        byte[] data = null;
-                        await Task.Run(() =>
-                        {
-                            data = file.Read(bIndex);
-                            stream.Write(new BlockResponse
-                            {
-                                Block = new Block
-                                {
-                                    FileIndex = fIndex,
-                                    BlockIndex = bIndex
-                                }
-                            });
-                            stream.Write(data);
-                        });
-                        torrent.AddBytesSent(data.Length);
-                        if (++hasSent >= maxBlocksCount)
-                            break;
+                        General.Log("Error read block",
+                            $"\tTorrent name: {torrent.Name}",
+                            $"\tFile path: {file.FullPath}");
+                        continue;
                     }
+
+                    BasePeerResponse response = (BlockResponse)new Block
+                    {
+                        FileIndex = fIndex,
+                        BlockIndex = bIndex
+                    };
+                    await Task.Run(() =>
+                    {
+                        stream.Write(response);
+                        stream.Write(data);
+                    });
+
+                    torrent.AddBytesSent(data.Length);
+                    if (++hasSent >= maxBlocksCount)
+                        break;
                 }
                 if (hasSent >= maxBlocksCount)
                     break;
@@ -153,16 +230,26 @@ namespace CNLab4_Client.GUI
         private async void AddTorrent()
         {
             var dialog = new AddTorrentDialog();
+            dialog.Owner = _owner;
             if (dialog.ShowDialog() != true)
                 return;
 
             string accessCode = dialog.AccessCode;
             string directory = dialog.Directory;
 
+            await AddTorrent(accessCode, directory);
+        }
+
+        private async Task AddTorrent(string accessCode, string directory)
+        {
             try
             {
                 TorrentInfo torrentInfo = await ServerProtocol.GetTorrentInfoAsync(accessCode);
-                Torrents.Add(new TorrentVM(directory, torrentInfo));
+                var torrent = new TorrentVM(directory, torrentInfo);
+                Torrents.Add(torrent);
+                if (Torrents.Count == 1)
+                    SelectedTorrent = torrent;
+
             }
             catch (ErrorResponseException e)
             {
@@ -196,11 +283,19 @@ namespace CNLab4_Client.GUI
             if (!TrySelectDirectory(out string torrentDir))
                 return;
 
+            await RegisterTorrentDir(torrentDir);
+        }
+
+        private async Task RegisterTorrentDir(string torrentDir)
+        {
             try
             {
                 TorrentInfo torrentInfo = await ServerProtocol.RegisterTorrentDirAsync(torrentDir);
                 string baseDir = new DirectoryInfo(torrentDir).Parent.FullName;
-                Torrents.Add(new TorrentVM(baseDir, torrentInfo, true));
+                var torrent = new TorrentVM(baseDir, torrentInfo, true);
+                Torrents.Add(torrent);
+                if (Torrents.Count == 1)
+                    SelectedTorrent = torrent;
                 General.Log(new string[]
                 {
                     "Torrent registered successfully",
@@ -232,7 +327,6 @@ namespace CNLab4_Client.GUI
                     $"\tTorrent directory: {torrentDir}"
                 });
             }
-
         }
 
         private async void RegisterTorrentFile()

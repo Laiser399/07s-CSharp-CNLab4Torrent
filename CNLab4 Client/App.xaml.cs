@@ -16,13 +16,18 @@ namespace CNLab4_Client
     /// </summary>
     public partial class App : Application
     {
+        public App()
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
-            var window = new MainWindow(59001);
-            window.Show();
-            window.Top = 340;
-            window.Left = 100;
-
+            MainWindow = new MainWindow(59001);
+            MainWindow.Show();
+            MainWindow.Top = 80;
+            MainWindow.Left = 100;
+            MainWindow.Closed += (_, __) => Shutdown();
 
             //var dialog = new InputDialog
             //{
@@ -33,11 +38,15 @@ namespace CNLab4_Client
 
             //if (dialog.ShowDialog() == true)
             //{
-                
+            //    MainWindow = new MainWindow(int.Parse(dialog.InputText));
+            //    MainWindow.Show();
+            //    MainWindow.Top = 340;
+            //    MainWindow.Left = 100;
+            //    MainWindow.Closed += (_, __) => Shutdown();
             //}
             //else
             //{
-            //    base.OnStartup(e);
+            //    Shutdown();
             //}
         }
     }

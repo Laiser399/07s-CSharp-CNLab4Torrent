@@ -26,7 +26,7 @@ namespace CNLab4_Server
                 }
             };
 
-            Server server = new Server();
+            Server server = new Server(59399);
             server.StartAsync();
             while (true) { }
         }

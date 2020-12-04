@@ -35,14 +35,16 @@
             <TextBlock Grid.Column="2" Text="Server address:"/>
             <TextBox Grid.Column="3" IsReadOnly="True" Text="{Binding ServerAddressStrRepr, Mode=OneWay}"/>
         </Grid>
-        <ListView Grid.Row="2" ItemsSource="{Binding Torrents}" SelectedItem="{Binding SelectedTorrent}">
+        <ListView Grid.Row="2" ItemsSource="{Binding Torrents}" SelectedItem="{Binding SelectedTorrent, Mode=TwoWay}">
             <ListView.View>
                 <GridView>
                     <GridView.Columns>
                         <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name, Mode=OneTime}"/>
                         <GridViewColumn Header="Progress" DisplayMemberBinding="{Binding ProgressStrRepr, Mode=OneWay}"/>
                         <GridViewColumn Header="Size" DisplayMemberBinding="{Binding FullSizeStrRepr, Mode=OneTime}"/>
-                        <GridViewColumn Header="Sending speed" DisplayMemberBinding="{Binding SendSpeedStrRepr, Mode=OneWay}"/>
+                        
+                        <GridViewColumn Header="Input speed" DisplayMemberBinding="{Binding ReceiveSpeedStrRepr, Mode=OneWay}"/>
+                        <GridViewColumn Header="Output speed" DisplayMemberBinding="{Binding SendSpeedStrRepr, Mode=OneWay}"/>
                         
                     </GridView.Columns>
                 </GridView>
@@ -51,7 +53,7 @@
         <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" ShowsPreview="False"/>
         <TabControl Grid.Row="4">
             <TabItem Header="Torrent files">
-                <ListView Grid.Row="1" ItemsSource="{Binding SelectedTorrent.Files, Mode=OneWay}">
+                <ListView ItemsSource="{Binding SelectedTorrent.Files, Mode=OneWay}">
                     <ListView.View>
                         <GridView>
                             <GridView.Columns>
@@ -64,7 +66,7 @@
                     </ListView.View>
                 </ListView>
             </TabItem>
-            <TabItem Header="Torrent info">
+            <TabItem Header="Torrent info" IsSelected="True">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="auto"/>
@@ -91,9 +93,13 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Log">
-                <TextBox AcceptsReturn="True" IsReadOnly="True"
-                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                         x:Name="LogTextBox" FontFamily="Consolas"/>
+                <Grid>
+                    <TextBox AcceptsReturn="True" IsReadOnly="True"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             x:Name="LogTextBox" FontFamily="Consolas"/>
+                    <CheckBox x:Name="IsScrollToDown" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                              ToolTip="Is scroll to down on update." Margin="1.5" IsChecked="True"/>
+                </Grid>
             </TabItem>
         </TabControl>
         

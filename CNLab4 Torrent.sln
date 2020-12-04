@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4", "CNLab4\CNLab4.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4 Client2 Test", "CNLab4 Client2 Test\CNLab4 Client2 Test.csproj", "{31DFCA29-64CA-412D-A764-E12FF1D4C969}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4 Client3 Test", "CNLab4 Client3 Test\CNLab4 Client3 Test.csproj", "{56BCAD8D-FF0C-4B4C-8882-92E0E9C48A88}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CNLab4 Client4 Test", "CNLab4 Client4 Test\CNLab4 Client4 Test.csproj", "{EA93C9D4-4299-48B1-9717-B5E5E07437C9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		{31DFCA29-64CA-412D-A764-E12FF1D4C969}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{31DFCA29-64CA-412D-A764-E12FF1D4C969}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{31DFCA29-64CA-412D-A764-E12FF1D4C969}.Release|Any CPU.Build.0 = Release|Any CPU
+		{56BCAD8D-FF0C-4B4C-8882-92E0E9C48A88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{56BCAD8D-FF0C-4B4C-8882-92E0E9C48A88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{56BCAD8D-FF0C-4B4C-8882-92E0E9C48A88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{56BCAD8D-FF0C-4B4C-8882-92E0E9C48A88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA93C9D4-4299-48B1-9717-B5E5E07437C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA93C9D4-4299-48B1-9717-B5E5E07437C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA93C9D4-4299-48B1-9717-B5E5E07437C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA93C9D4-4299-48B1-9717-B5E5E07437C9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -6,7 +6,8 @@
         xmlns:gui="clr-namespace:CNLab4_Client.GUI"
         mc:Ignorable="d"
         Title="AddTorrentDialog"
-        Width="600" SizeToContent="Height" ResizeMode="NoResize">
+        Width="600" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>

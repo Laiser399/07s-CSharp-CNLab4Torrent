@@ -7,7 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace CNLab4_Client2_Test
+namespace CNLab4_Client3_Test
 {
     /// <summary>
     /// Логика взаимодействия для App.xaml
@@ -16,10 +16,10 @@ namespace CNLab4_Client2_Test
     {
         protected override void OnStartup(StartupEventArgs e)
         {
-            var window = new MainWindow(59002);
+            var window = new MainWindow(59003);
             window.Show();
-            window.Top = 80;
-            window.Left = 1000;
+            window.Top = 540;
+            window.Left = 100;
         }
     }
 }

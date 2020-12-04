@@ -25,9 +25,9 @@ namespace CNLab4_Server
         private Dictionary<string, TorrentInfo> _torrents = new Dictionary<string, TorrentInfo>();
         private PeersContainer _peersContainer = new PeersContainer();
 
-        public Server()
+        public Server(int port)
         {
-            _listener = new TcpListener(IPAddress.Any, 59399);
+            _listener = new TcpListener(IPAddress.Any, port);
         }
 
         public async void StartAsync()
@@ -41,7 +41,7 @@ namespace CNLab4_Server
             while (_isStarted)
             {
                 TcpClient client = await _listener.AcceptTcpClientAsync();
-                OnClientAcceptedAsync(client);
+                OnClientAccepted(client);
             }
         }
 
@@ -52,16 +52,27 @@ namespace CNLab4_Server
             _isStarted = false;
         }
 
-        private void OnClientAcceptedAsync(TcpClient client)
+        private void OnClientAccepted(TcpClient client)
         {
-            using (client)
+            try
             {
-                NetworkStream stream = client.GetStream();
+                using (client)
+                {
+                    NetworkStream stream = client.GetStream();
 
-                BaseServerRequest request = stream.ReadMessage<BaseServerRequest>();
-                BaseServerResponse response = OnRequest(request);
-                stream.Write(response);
+                    BaseServerRequest request = stream.ReadMessage<BaseServerRequest>();
+                    try
+                    {
+                        BaseServerResponse response = OnRequest(request);
+                        stream.Write(response);
+                    }
+                    catch (UnknownRequestException)
+                    {
+                        stream.Write(new Error { Text = "Unknown request." });
+                    }
+                }
             }
+            catch { }
         }
 
         private BaseServerResponse OnRequest(BaseServerRequest request)
@@ -198,17 +209,19 @@ namespace CNLab4_Server
         // static
         private static int CalcBlockSize(long fileLength)
         {
-            int minBlockSize = 10_000;
-            int maxBlockSize = 10_000_000;
-            int defaultBlocksCount = 100;
+            return 4_000_000;
 
-            long blockSize = fileLength / defaultBlocksCount;
-            if (blockSize < minBlockSize)
-                blockSize = minBlockSize;
-            else if (blockSize > maxBlockSize)
-                blockSize = maxBlockSize;
+            //int minBlockSize = 10_000;
+            //int maxBlockSize = 10_000_000;
+            //int defaultBlocksCount = 100;
 
-            return (int)blockSize;
+            //long blockSize = fileLength / defaultBlocksCount;
+            //if (blockSize < minBlockSize)
+            //    blockSize = minBlockSize;
+            //else if (blockSize > maxBlockSize)
+            //    blockSize = maxBlockSize;
+
+            //return (int)blockSize;
         }
     }
 

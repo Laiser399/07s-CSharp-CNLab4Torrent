@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace CNLab4_Client.GUI
 {
-    public class TorrentFileVM : BaseViewModel
+    public class TorrentFileVM : BaseViewModel, IDisposable
     {
 
         #region Bindings
@@ -47,6 +47,10 @@ namespace CNLab4_Client.GUI
 
         #endregion
 
+        private FileStream _fileStream;
+
+        public bool Exists => File.Exists(FullPath);
+
         private BitArray _doneMask;
 
         public TorrentFileVM(string directory, TorrentFileInfo fileInfo, bool isDone = false)
@@ -69,14 +73,32 @@ namespace CNLab4_Client.GUI
             }
         }
 
-        public void CreateEmptyFile()
+        ~TorrentFileVM()
         {
-            FileInfo fileInfo = new FileInfo(FullPath);
-            Directory.CreateDirectory(fileInfo.DirectoryName);// TODO exc
-            using (FileStream fStream = new FileStream(fileInfo.FullName, FileMode.OpenOrCreate, FileAccess.Write))
+            Dispose();
+        }
+
+        public async Task<bool> TryCreateEmptyFileAsync()
+        {
+            try
             {
-                fStream.SetLength(FileSize);
+                FileInfo fileInfo = new FileInfo(FullPath);
+                Directory.CreateDirectory(fileInfo.DirectoryName);
+                await Task.Run(() =>
+                {
+                    using (FileStream fStream = new FileStream(fileInfo.FullName, FileMode.OpenOrCreate, FileAccess.Write))
+                    {
+                        fStream.SetLength(FileSize);
+                    }
+                });
+                
+                return true;
             }
+            catch
+            {
+                return false;
+            }
+            
         }
 
         public bool IsDone(int blockIndex)
@@ -84,66 +106,114 @@ namespace CNLab4_Client.GUI
             return _doneMask[blockIndex];
         }
 
-        public async Task<byte[]> ReadAsync(int blockIndex)
+        /// <returns>null if error</returns>
+        public async Task<byte[]> TryReadAsync(int blockIndex)
         {
-            using (FileStream fStream = File.Open(FullPath, FileMode.Open, FileAccess.Read))
+            return await Task.Run(() =>
             {
-                fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                return await fStream.ReadBytesAsync(GetBlockSize(blockIndex));
-            }
-        }
-
-        public byte[] Read(int blockIndex)
-        {
-            using (FileStream fStream = File.Open(FullPath, FileMode.Open, FileAccess.Read))
-            {
-                fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                return fStream.ReadBytes(GetBlockSize(blockIndex));
-            }
-        }
-
-        public async Task WriteAsync(int blockIndex, byte[] data)
-        {
-            if (IsDone(blockIndex))
-                throw new ArgumentException("Block already done.");
-            int currentBlockSize = GetBlockSize(blockIndex);
-            if (data.Length != currentBlockSize)
-                throw new ArgumentException("Wrong length of bytes array.");
-
-            await Task.Run(() =>
-            {
-                using (FileStream fStream = File.Open(FullPath, FileMode.Open))
+                try
                 {
-                    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                    fStream.Write(data, 0, currentBlockSize);
+                    if (!TryOpenStream())
+                        return null;
+
+                    lock (_fileStream)
+                    {
+                        _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                        return _fileStream.ReadBytes(GetBlockSize(blockIndex));
+                    }
+                    //using (FileStream fStream = File.Open(FullPath, FileMode.Open, FileAccess.Read))
+                    //{
+                    //    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                    //    return fStream.ReadBytes(GetBlockSize(blockIndex));
+                    //}
+                }
+                catch
+                {
+                    return null;
                 }
             });
-            //using (FileStream fStream = File.Open(FullPath, FileMode.Open))
-            //{
-            //    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-            //    await fStream.WriteAsync(data, 0, currentBlockSize);
-            //}
-
-            Received += data.Length;
-            _doneMask.Set(blockIndex, true);
         }
 
-        public void Write(int blockIndex, byte[] data)
+        public async Task<bool> TryWriteAsync(int blockIndex, byte[] data)
         {
             if (IsDone(blockIndex))
-                throw new ArgumentException("Block already done.");
+                return false;
             int currentBlockSize = GetBlockSize(blockIndex);
             if (data.Length != currentBlockSize)
-                throw new ArgumentException("Wrong length of bytes array.");
+                return false;
 
-            using (FileStream fStream = File.Open(FullPath, FileMode.Open))
+            bool res = await Task.Run(() =>
             {
-                fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                fStream.Write(data, 0, currentBlockSize);
-            }
+                try
+                {
 
-            Received += data.Length;
-            _doneMask.Set(blockIndex, true);
+                    if (!TryOpenStream())
+                        return false;
+
+                    lock (_fileStream)
+                    {
+                        _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                        _fileStream.Write(data, 0, currentBlockSize);
+                    }
+
+                    //using (FileStream fStream = File.Open(FullPath, FileMode.Open))
+                    //{
+                    //    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                    //    fStream.Write(data, 0, currentBlockSize);
+                    //}
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+
+            if (res)
+            {
+                Received += data.Length;
+                _doneMask.Set(blockIndex, true);
+                if (Received == _fileSize)
+                {
+                    lock (_fileStream)
+                    {
+                        _fileStream.Close();
+                        _fileStream = null;
+                    }
+                }
+                return true;
+            }
+            else
+                return false;
+        }
+
+        private bool TryOpenStream()
+        {
+            try
+            {
+                if (_fileStream is object)
+                {
+                    if (!_fileStream.CanRead)
+                    {
+                        _fileStream.Close();
+                        _fileStream = null;
+                    }
+                }
+
+                if (_fileStream is null)
+                {
+                    if (Received == _fileSize)
+                        _fileStream = File.Open(FullPath, FileMode.Open, FileAccess.Read);
+                    else
+                        _fileStream = File.Open(FullPath, FileMode.Open);
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            
         }
 
         public int GetBlockSize(int blockIndex)
@@ -158,6 +228,12 @@ namespace CNLab4_Client.GUI
         {
             BitArray undone = (BitArray)_doneMask.Clone();
             return undone.Not();
+        }
+
+        public virtual void Dispose()
+        {
+            if (_fileStream is object)
+                _fileStream.Close();
         }
     }
 }

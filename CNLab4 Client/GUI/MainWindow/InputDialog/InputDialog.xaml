@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title=""
         Width="500" ResizeMode="NoResize" SizeToContent="Height"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterOwner">
     <Grid Margin="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>

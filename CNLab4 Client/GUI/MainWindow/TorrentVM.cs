@@ -22,6 +22,7 @@ namespace CNLab4_Client.GUI
         private string _directory;
         public string Directory => _directory;
 
+        private Speedometer _receiveSpeedometer = new Speedometer(10_000);
         private Speedometer _sendSpeedometer = new Speedometer(10_000);
 
         #region Bindings
@@ -51,6 +52,7 @@ namespace CNLab4_Client.GUI
         private long _fullSize;
         public string FullSizeStrRepr => General.GetSizeStrRepr(_fullSize);
 
+        public string ReceiveSpeedStrRepr => _receiveSpeedometer.GetSpeedStrRepr();
         public string SendSpeedStrRepr => _sendSpeedometer.GetSpeedStrRepr();
 
         #endregion
@@ -69,33 +71,19 @@ namespace CNLab4_Client.GUI
             }
             else
             {
-                CreateEmptyFiles();
                 ReceiveUntilDone();
             }
 
-            UpdateSpeedAsync();
-        }
-
-        private async void UpdateSpeedAsync()
-        {
-            while (true)
-            {
-                NotifyPropChanged(nameof(SendSpeedStrRepr));
-                await Task.Delay(1000);
-            }
-        }
-
-        private void CreateEmptyFiles()
-        {
-            foreach (TorrentFileVM file in Files)
-            {
-                file.CreateEmptyFile();
-            }
         }
 
         public void AddBytesSent(long bytesCount)
         {
             _sendSpeedometer.Add(bytesCount);
+        }
+
+        public void UpdateSpeeds()
+        {
+            NotifyPropChanged(nameof(ReceiveSpeedStrRepr), nameof(SendSpeedStrRepr));
         }
 
         private async void ReceiveUntilDone()
@@ -113,23 +101,31 @@ namespace CNLab4_Client.GUI
                 // receive data from each peer
                 foreach (var peerInfo in infos)
                 {
-                    List<FileBlocks> blocksNeed = GetBlocksNeeded(peerInfo.FilesMasks);
+                    List<FileBlocks> blocksNeed = GetBlocksNeeded(peerInfo.FilesMasks, 10);
                     if (blocksNeed.Count == 0)
                         continue;
-
-                    using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
+                    try
                     {
-                        await client.ConnectAsync(peerInfo.Address.Address, peerInfo.Address.Port);
-                        NetworkStream stream = client.GetStream();
-
-                        await stream.WriteAsync(new GetBlocks
+                        using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
                         {
-                            AccessCode = AccessCode,
-                            BlocksNeed = blocksNeed
-                        });
+                            await client.ConnectAsync(peerInfo.Address.Address, peerInfo.Address.Port);
+                            NetworkStream stream = client.GetStream();
 
-                        await ReadBlocksAsync(stream);
+                            await stream.WriteAsync(new GetBlocks
+                            {
+                                AccessCode = AccessCode,
+                                BlocksNeed = blocksNeed
+                            });
+
+                            await ReadBlocksAsync(stream);
+
+                            General.Log("Received blocks",
+                                $"\tTorrent name: {Name}",
+                                $"\tSender: {peerInfo.Address}");
+                        }
                     }
+                    catch { }
+                    
                 }
 
             }
@@ -142,7 +138,6 @@ namespace CNLab4_Client.GUI
             try
             {
                 return await Task.Run(() => ServerProtocol.GetPeersInfo(AccessCode, undoneMasks));
-                //return await ServerProtocol.GetPeersInfoAsync(AccessCode, undoneMasks);
             }
             catch (ErrorResponseException e)
             {
@@ -179,7 +174,7 @@ namespace CNLab4_Client.GUI
             return Files.Select(file => file.GetUndoneMask()).ToArray();
         }
 
-        private List<FileBlocks> GetBlocksNeeded(IList<BitArray> availableBlocks)
+        private List<FileBlocks> GetBlocksNeeded(IList<BitArray> availableBlocks, int maxCount)
         {
             List<FileBlocks> blocksNeed = new List<FileBlocks>();
 
@@ -196,6 +191,8 @@ namespace CNLab4_Client.GUI
                         FileIndex = i,
                         BlocksIndices = blocksIndices
                     });
+                    if (blocksIndices.Count >= maxCount)
+                        break;
                 }
             }
 
@@ -207,7 +204,6 @@ namespace CNLab4_Client.GUI
             while (true)
             {
                 BasePeerResponse peerResponse = await Task.Run(() => stream.ReadMessage<BasePeerResponse>());
-                //BasePeerResponse peerResponse = await stream.ReadMessageAsync<BasePeerResponse>();
                 if (peerResponse is BlockResponse blockResponse)
                 {
                     int fIndex = blockResponse.Block.FileIndex;
@@ -217,16 +213,32 @@ namespace CNLab4_Client.GUI
 
                     // read bytes
                     byte[] data = await Task.Run(() => stream.ReadBytes(blockSize));
-                    //byte[] data = await stream.ReadBytesAsync(blockSize);
 
                     // write to file, mark as done
-                    await Task.Run(() => file.Write(bIndex, data));
-                    //await file.WriteAsync(bIndex, data);
+                    if (file.IsDone(bIndex))
+                    {
+                        General.Log("Warning! Received block that is done already.");
+                        continue;
+                    }
+                    if (!file.Exists && !await file.TryCreateEmptyFileAsync())
+                    {
+                        General.Log("Error creating file",
+                            $"\tFile path: {file.FullPath}",
+                            $"Torrent name: {Name}");
+                        continue;
+                    }
+                    if (!await file.TryWriteAsync(bIndex, data))
+                    {
+                        General.Log("Error write block",
+                            $"\tTorrent name: {Name}",
+                            $"\tFile path: {file.FullPath}");
+                        continue;
+                    }
+                    Received += data.Length;
+                    _receiveSpeedometer.Add(data.Length);
 
                     // become peer
                     await BecomePeerAsync(fIndex, bIndex);
-
-                    Received += data.Length;
                 }
                 else if (peerResponse is EndResponse)
                 {
@@ -240,36 +252,6 @@ namespace CNLab4_Client.GUI
             }
         }
 
-        //private void ReadBlocks(NetworkStream stream)
-        //{
-        //    while (true)
-        //    {
-        //        BasePeerResponse peerResponse = stream.ReadMessage<BasePeerResponse>();
-        //        if (peerResponse is BlockResponse blockResponse)
-        //        {
-        //            int fIndex = blockResponse.Block.FileIndex;
-        //            int bIndex = blockResponse.Block.BlockIndex;
-        //            TorrentFileVM file = Files[fIndex];
-        //            int blockSize = file.GetBlockSize(bIndex);
-        //            // read bytes
-        //            byte[] data = stream.ReadBytes(blockSize);
-        //            // write to file, mark as done
-        //            file.Write(bIndex, data);
-        //            // become peer
-        //            await BecomePeerAsync(fIndex, bIndex);
-        //        }
-        //        else if (peerResponse is EndResponse)
-        //        {
-        //            break;
-        //        }
-        //        else
-        //        {
-        //            General.Log("Warning! Received unknown response from peer.");
-        //            break;
-        //        }
-        //    }
-        //}
-
         private async Task BecomePeerAsync(int fileIndex, int blockIndex)
         {
             try
@@ -282,11 +264,6 @@ namespace CNLab4_Client.GUI
                         BlockIndex = blockIndex
                     });
                 });
-                //await ServerProtocol.BecomePeerAsync(AccessCode, new Block
-                //{
-                //    FileIndex = fileIndex,
-                //    BlockIndex = blockIndex
-                //});
             }
             catch (ErrorResponseException e)
             {

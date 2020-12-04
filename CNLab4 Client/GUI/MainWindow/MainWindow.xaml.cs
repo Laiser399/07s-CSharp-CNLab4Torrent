@@ -47,7 +47,8 @@ namespace CNLab4_Client.GUI
                     LogTextBox.AppendText(line);
                     LogTextBox.AppendText("\n");
                 }
-                LogTextBox.ScrollToEnd();
+                if (IsScrollToDown.IsChecked == true)
+                    LogTextBox.ScrollToEnd();
             };
 
             _viewModel = new MainWindowVM(this);
