@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -17,6 +18,7 @@ using CNLab4.Messages.Peer.Requests;
 using CNLab4.Messages.Peer.Responses;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json.Linq;
+
 
 namespace CNLab4_Client.GUI
 {
@@ -65,16 +67,23 @@ namespace CNLab4_Client.GUI
             StartListenAsync();
             UpdateSpeedsLoopAsync();
 
-            MakeTestAsync();
-        }
+#if TASKRUN
+            General.Log("TASKRUN defined");
+#else
+            General.Log("TASKRUN not defined");
+#endif
 
+#if DEBUG
+            MakeTestAsync();
+#endif
+        }
+#if DEBUG
         private async void MakeTestAsync()
         {
             await Task.Delay(1000);
-            // TODO Test delete
             if (General.PeerPort == 59001)
             {
-                await RegisterTorrentDir(@"D:\Downloads\Monty.Pythons.Flying.Circus.S01.1080p.BluRay.2xRus.Eng");
+                await RegisterTorrentDir(@"D:\Downloads\_UnplayedOsuMaps");
             }
             else
             {
@@ -104,7 +113,7 @@ namespace CNLab4_Client.GUI
                 }
             }
         }
-
+#endif
         private async void UpdateSpeedsLoopAsync()
         {
             while (true)
@@ -117,7 +126,7 @@ namespace CNLab4_Client.GUI
 
         private async void StartListenAsync()
         {
-            int maxClientConnections = 5;
+            int maxClientConnections = 10;
             int connectedCount = 0;
 
             TcpListener listener = new TcpListener(IPAddress.Any, General.PeerPort);
@@ -125,6 +134,7 @@ namespace CNLab4_Client.GUI
             while (true)
             {
                 TcpClient client = await listener.AcceptTcpClientAsync();
+
                 if (connectedCount >= maxClientConnections)
                 {
                     client.Close();
@@ -145,71 +155,104 @@ namespace CNLab4_Client.GUI
                 using (client)
                 {
                     NetworkStream stream = client.GetStream();
+                    //stream.ReadTimeout = 1000;// TODO delete
+                    //stream.WriteTimeout = 1000;// TODO delete
 
-                    BasePeerRequest request = await stream.ReadMessageAsync<BasePeerRequest>();
-                    if (request is GetBlocks getBlocks)
-                        await OnRequest(getBlocks, stream);
+                    while (true)
+                    {
+#if TASKRUN
+                        BasePeerRequest request = await stream.ReadMessageTask<BasePeerRequest>();
+#else
+                        BasePeerRequest request = await stream.ReadMessageAsync<BasePeerRequest>();
+#endif
+                        if (request is GetDoneMasks getDoneMasks)
+                            await OnRequestAsync(getDoneMasks, stream);
+                        if (request is GetBlock getBlock)
+                            await OnRequestAsync(getBlock, stream);
+                    }
                 }
+            }
+            catch (EndOfStreamException)
+            {
+                General.Log($"Client disconnected because {nameof(EndOfStreamException)} was thrown.");
             }
             catch (Exception e)
             {
                 General.Log("TcpClient exception",
                     $"\tMessage: {e.Message}");
             }
-            
         }
 
-        private async Task OnRequest(GetBlocks request, NetworkStream stream)
+        private async Task OnRequestAsync(GetDoneMasks request, NetworkStream stream)
         {
-            if (!TryFindTorrent(request.AccessCode, out TorrentVM torrent))
-                return;
-
-            int maxBlocksCount = 10;
-            int hasSent = 0;
-
-            foreach (var blocks in request.BlocksNeed)
+            if (TryFindTorrent(request.AccessCode, out TorrentVM torrent))
             {
-                int fIndex = blocks.FileIndex;
-                TorrentFileVM file = torrent.Files[fIndex];
-                foreach (int bIndex in blocks.BlocksIndices)
+                BitArray[] doneMasks = torrent.GetDoneMasks();
+#if TASKRUN
+                await stream.WriteTask(new DoneMasksResponse { DoneMasks = doneMasks });
+#else
+                await stream.WriteAsync(new DoneMasksResponse { DoneMasks = doneMasks });
+#endif
+            }
+            else
+            {
+#if TASKRUN
+                await stream.WriteTask(new Error { Text = "Wrong access key." });
+#else
+                await stream.WriteAsync(new Error { Text = "Wrong access key." });
+#endif
+            }
+        }
+
+        private async Task OnRequestAsync(GetBlock request, NetworkStream stream)
+        {
+            if (IsValid(request, out TorrentVM torrent, out TorrentFileVM file))
+            {
+                byte[] data = await file.TryReadAsync(request.BlockIndex);
+                if (data is object)
                 {
-                    if (!file.IsDone(bIndex))
-                        continue;
-
-                    byte[] data = await file.TryReadAsync(bIndex);
-                    if (data is null)
-                    {
-                        General.Log("Error read block",
-                            $"\tTorrent name: {torrent.Name}",
-                            $"\tFile path: {file.FullPath}");
-                        continue;
-                    }
-
-                    BasePeerResponse response = (BlockResponse)new Block
-                    {
-                        FileIndex = fIndex,
-                        BlockIndex = bIndex
-                    };
-                    await Task.Run(() =>
-                    {
-                        stream.Write(response);
-                        stream.Write(data);
-                    });
-
-                    torrent.AddBytesSent(data.Length);
-                    if (++hasSent >= maxBlocksCount)
-                        break;
+#if TASKRUN
+                    await stream.WriteTask(new BlockSentResponse());
+                    await stream.WriteTask(data);
+#else
+                    await stream.WriteAsync(new BlockSentResponse());
+                    await stream.WriteAsync(data);
+#endif
+                    torrent.OnBlockSent(data.Length);
                 }
-                if (hasSent >= maxBlocksCount)
-                    break;
+                else
+                {
+#if TASKRUN
+                    await stream.WriteTask(new Error { Text = "Block unavailable." });
+#else
+                    await stream.WriteAsync(new Error { Text = "Block unavailable." });
+#endif
+                }
+            }
+            else
+            {
+#if TASKRUN
+                await stream.WriteTask(new Error { Text = "Wrong access key." });
+#else
+                await stream.WriteAsync(new Error { Text = "Wrong access key." });
+#endif
+            }
+        }
+
+        private bool IsValid(GetBlock request, out TorrentVM torrent, out TorrentFileVM file)
+        {
+            if (TryFindTorrent(request.AccessCode, out torrent))
+            {
+                if (request.FileIndex >= 0 && request.FileIndex < torrent.Files.Count)
+                {
+                    file = torrent.Files[request.FileIndex];
+                    if (request.BlockIndex >= 0 && request.BlockIndex < file.BlocksCount)
+                        return true;
+                }
             }
 
-            await stream.WriteAsync(new EndResponse());
-            General.Log(new string[]
-            {
-                $"Has sent {hasSent} blocks",
-                $"\tTorrent name: {torrent.Name}"
-            });
+            file = null;
+            return false;
         }
 
         private bool TryFindTorrent(string accessCode, out TorrentVM result)
@@ -242,6 +285,12 @@ namespace CNLab4_Client.GUI
 
         private async Task AddTorrent(string accessCode, string directory)
         {
+            if (TryFindTorrent(accessCode, out var _))
+            {
+                MessageBox.Show($"Torrent with this access code alreay added.");
+                return;
+            }
+
             try
             {
                 TorrentInfo torrentInfo = await ServerProtocol.GetTorrentInfoAsync(accessCode);

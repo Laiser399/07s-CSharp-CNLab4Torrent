@@ -14,7 +14,7 @@ namespace CNLab4_Client
 
     static class General
     {
-        public static readonly IPEndPoint ServerAddress = new IPEndPoint(IPAddress.Loopback, 59399);// TODO change
+        public static readonly IPEndPoint ServerAddress = new IPEndPoint(IPAddress.Loopback, 59399);
         public static readonly IPAddress PeerIP;
         private static int _peerPort = 0;
         public static int PeerPort

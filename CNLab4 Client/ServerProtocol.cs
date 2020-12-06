@@ -115,7 +115,11 @@ namespace CNLab4_Client
                 await client.ConnectAsync(General.ServerAddress.Address, General.ServerAddress.Port);
                 NetworkStream stream = client.GetStream();
 
-                BaseServerRequest request = new GetTorrentInfo { AccessCode = accessCode };
+                BaseServerRequest request = new GetTorrentInfo
+                {
+                    AccessCode = accessCode,
+                    SenderAddress = General.PeerAddress
+                };
                 await stream.WriteAsync(request);
 
                 BaseServerResponse response = await stream.ReadMessageAsync<BaseServerResponse>();
@@ -134,26 +138,22 @@ namespace CNLab4_Client
 
         /// <exception cref="ErrorResponseException"></exception>
         /// <exception cref="UnknownResponseException"></exception>
-        public static async Task<IList<PeersInfoResponse.Info>> GetPeersInfoAsync(string accessCode, 
-            IList<BitArray> needMasks)
+        public static async Task<IList<IPEndPoint>> GetPeersAsync(string accessCode)
         {
             using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
             {
                 await client.ConnectAsync(General.ServerAddress.Address, General.ServerAddress.Port);
                 NetworkStream stream = client.GetStream();
 
-                BaseServerRequest request = new GetPeersInfo
+                await stream.WriteAsync(new GetPeers
                 {
-                    AccessCode = accessCode,
-                    SenderAddress = General.PeerAddress,
-                    NeedMasks = needMasks
-                };
-                await stream.WriteAsync(request);
+                    AccessCode = accessCode
+                });
 
                 BaseServerResponse response = await stream.ReadMessageAsync<BaseServerResponse>();
-                if (response is PeersInfoResponse peersInfoResponse)
+                if (response is PeersResponse peersResponse)
                 {
-                    return peersInfoResponse.Infos;
+                    return peersResponse.Peers;
                 }
                 else if (response is Error errorResponse)
                 {
@@ -164,28 +164,29 @@ namespace CNLab4_Client
             }
         }
 
+        public static Task<IList<IPEndPoint>> GetPeersTask(string accessCode)
+        {
+            return Task.Run(() => GetPeers(accessCode));
+        }
+
         /// <exception cref="ErrorResponseException"></exception>
         /// <exception cref="UnknownResponseException"></exception>
-        public static IList<PeersInfoResponse.Info> GetPeersInfo(string accessCode,
-            IList<BitArray> needMasks)
+        public static IList<IPEndPoint> GetPeers(string accessCode)
         {
             using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
             {
                 client.Connect(General.ServerAddress);
                 NetworkStream stream = client.GetStream();
 
-                BaseServerRequest request = new GetPeersInfo
+                stream.Write(new GetPeers
                 {
-                    AccessCode = accessCode,
-                    SenderAddress = General.PeerAddress,
-                    NeedMasks = needMasks
-                };
-                stream.Write(request);
+                    AccessCode = accessCode
+                });
 
                 BaseServerResponse response = stream.ReadMessage<BaseServerResponse>();
-                if (response is PeersInfoResponse peersInfoResponse)
+                if (response is PeersResponse peersResponse)
                 {
-                    return peersInfoResponse.Infos;
+                    return peersResponse.Peers;
                 }
                 else if (response is Error errorResponse)
                 {
@@ -195,82 +196,5 @@ namespace CNLab4_Client
                     throw new UnknownResponseException();
             }
         }
-
-        /// <exception cref="ErrorResponseException"></exception>
-        /// <exception cref="UnknownResponseException"></exception>
-        public static async Task BecomePeerAsync(string accessCode, Block availableBlock)
-        {
-            await BecomePeerAsync(accessCode, new Block[] { availableBlock });
-        }
-
-        /// <exception cref="ErrorResponseException"></exception>
-        /// <exception cref="UnknownResponseException"></exception>
-        public static void BecomePeer(string accessCode, Block availableBlock)
-        {
-            BecomePeer(accessCode, new Block[] { availableBlock });
-        }
-
-        /// <exception cref="ErrorResponseException"></exception>
-        /// <exception cref="UnknownResponseException"></exception>
-        public static async Task BecomePeerAsync(string accessCode, IList<Block> availableBlocks)
-        {
-            using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
-            {
-                await client.ConnectAsync(General.ServerAddress.Address, General.ServerAddress.Port);
-                NetworkStream stream = client.GetStream();
-
-                BaseServerRequest request = new BecomePeer
-                {
-                    AccessCode = accessCode,
-                    Address = General.PeerAddress,
-                    AvailableBlocks = availableBlocks
-                };
-                await stream.WriteAsync(request);
-
-                BaseServerResponse response = await stream.ReadMessageAsync<BaseServerResponse>();
-                if (response is Ok)
-                {
-                    return;
-                }
-                else if (response is Error errorResponse)
-                {
-                    throw new ErrorResponseException(errorResponse.Text);
-                }
-                else
-                    throw new UnknownResponseException();
-            }
-        }
-
-        /// <exception cref="ErrorResponseException"></exception>
-        /// <exception cref="UnknownResponseException"></exception>
-        public static void BecomePeer(string accessCode, IList<Block> availableBlocks)
-        {
-            using (TcpClient client = new TcpClient(AddressFamily.InterNetwork))
-            {
-                client.Connect(General.ServerAddress);
-                NetworkStream stream = client.GetStream();
-
-                BaseServerRequest request = new BecomePeer
-                {
-                    AccessCode = accessCode,
-                    Address = General.PeerAddress,
-                    AvailableBlocks = availableBlocks
-                };
-                stream.Write(request);
-
-                BaseServerResponse response = stream.ReadMessage<BaseServerResponse>();
-                if (response is Ok)
-                {
-                    return;
-                }
-                else if (response is Error errorResponse)
-                {
-                    throw new ErrorResponseException(errorResponse.Text);
-                }
-                else
-                    throw new UnknownResponseException();
-            }
-        }
-
     }
 }

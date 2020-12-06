@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace CNLab4.Messages.Peer.Responses
 {
-    public class EndResponse : BasePeerResponse
+    public class BlockSentResponse : BasePeerResponse
     {
     }
 }

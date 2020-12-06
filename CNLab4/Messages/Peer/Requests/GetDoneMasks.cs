@@ -6,9 +6,8 @@ using System.Threading.Tasks;
 
 namespace CNLab4.Messages.Peer.Requests
 {
-    public class GetBlocks : BasePeerRequest
+    public class GetDoneMasks : BasePeerRequest
     {
         public string AccessCode;
-        public IList<FileBlocks> BlocksNeed;
     }
 }

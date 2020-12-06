@@ -14,12 +14,14 @@ namespace CNLab4
         private TorrentFileInfo[] _filesInfo;
         public IReadOnlyList<TorrentFileInfo> FilesInfo => Array.AsReadOnly(_filesInfo);
         public string AccessCode { get; private set; }
+        public long FullSize { get; private set; }
 
         public TorrentInfo(string name, IEnumerable<TorrentFileInfo> filesInfo, string accessCode)
         {
             Name = name;
             _filesInfo = filesInfo.ToArray();
             AccessCode = accessCode;
+            FullSize = CalcFullSize();
         }
 
         public TorrentInfo(string name, TorrentFileInfo fileInfo, string accessCode)
@@ -27,9 +29,10 @@ namespace CNLab4
             Name = name;
             _filesInfo = new TorrentFileInfo[] { fileInfo };
             AccessCode = accessCode;
+            FullSize = CalcFullSize();
         }
 
-        public long GetFullSize()
+        private long CalcFullSize()
         {
             long size = 0;
             foreach (var fInfo in _filesInfo)

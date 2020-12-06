@@ -28,7 +28,15 @@ namespace CNLab4_Server
 
             Server server = new Server(59399);
             server.StartAsync();
-            while (true) { }
+
+            while (true)
+            {
+                Console.Clear();
+                Console.Write("Enter \"exit\" to stop server: ");
+                string line = Console.ReadLine();
+                if (line == "exit")
+                    break;
+            }
         }
 
     }

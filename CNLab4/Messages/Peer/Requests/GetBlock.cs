@@ -1,15 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CNLab4.Messages.Server.Requests
+namespace CNLab4.Messages.Peer.Requests
 {
-    public class GetTorrentInfo : BaseServerRequest
+    public class GetBlock : BasePeerRequest
     {
         public string AccessCode;
-        public IPEndPoint SenderAddress;
+        public int FileIndex;
+        public int BlockIndex;
     }
 }

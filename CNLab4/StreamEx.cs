@@ -23,6 +23,11 @@ namespace CNLab4
             return JsonConvert.DeserializeObject<T>(jsonString, BaseMessage.HierarchicalConverter);
         }
 
+        public static Task<T> ReadMessageTask<T>(this Stream stream) where T : BaseMessage
+        {
+            return Task.Run(() => stream.ReadMessage<T>());
+        }
+
         public static T ReadMessage<T>(this Stream stream) where T : BaseMessage
         {
             string jsonString = stream.ReadString();
@@ -34,6 +39,11 @@ namespace CNLab4
             string jsonString = JsonConvert.SerializeObject(message, Formatting.None,
                 BaseMessage.HierarchicalConverter);
             await stream.WriteAsync(jsonString);
+        }
+
+        public static Task WriteTask(this Stream stream, BaseMessage message)
+        {
+            return Task.Run(() => stream.Write(message));
         }
 
         public static void Write(this Stream stream, BaseMessage message)
@@ -183,9 +193,17 @@ namespace CNLab4
             int hasRead = 0;
             do
             {
-                hasRead += await stream.ReadAsync(data, hasRead, length - hasRead);
+                int tm = await stream.ReadAsync(data, hasRead, length - hasRead);
+                if (tm == 0)
+                    throw new EndOfStreamException();
+                hasRead += tm;
             } while (hasRead < length);
             return data;
+        }
+
+        public static Task<byte[]> ReadBytesTask(this Stream stream, int length)
+        {
+            return Task.Run(() => stream.ReadBytes(length));
         }
 
         public static byte[] ReadBytes(this Stream stream, int length)
@@ -194,7 +212,10 @@ namespace CNLab4
             int hasRead = 0;
             do
             {
-                hasRead += stream.Read(data, hasRead, length - hasRead);
+                int tm = stream.Read(data, hasRead, length - hasRead);
+                if (tm == 0)
+                    throw new EndOfStreamException();
+                hasRead += tm;
             } while (hasRead < length);
             return data;
         }
@@ -202,6 +223,11 @@ namespace CNLab4
         public static async Task WriteAsync(this Stream stream, byte[] data)
         {
             await stream.WriteAsync(data, 0, data.Length);
+        }
+
+        public static Task WriteTask(this Stream stream, byte[] data)
+        {
+            return Task.Run(() => stream.Write(data));
         }
 
         public static void Write(this Stream stream, byte[] data)

@@ -5,17 +5,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CNLab4_Client.GUI
 {
     public class TorrentFileVM : BaseViewModel, IDisposable
     {
+        private TorrentFileInfo _torrentFileInfo;
 
         #region Bindings
 
-        private string _relativePath;
-        public string RelativePath => _relativePath;
+        public string RelativePath => _torrentFileInfo.FilePath;
+        public int BlocksCount => _torrentFileInfo.BlocksCount;
+        public int BlockSize => _torrentFileInfo.BlockSize;
+        public int LastBlockSize => _torrentFileInfo.LastBlockSize;
 
         private string _fullPath;
         public string FullPath => _fullPath;
@@ -32,44 +36,32 @@ namespace CNLab4_Client.GUI
         }
         public string ProgressStrRepr => ((double)Received / FileSize * 100).ToString("F2") + '%';
 
-        private long _fileSize;
-        public long FileSize => _fileSize;
+        public long FileSize => _torrentFileInfo.FileLength;
         public string FileSizeStrRepr => General.GetSizeStrRepr(FileSize);
-
-        private int _blocksCount;
-        public int BlocksCount => _blocksCount;
-
-        private int _blockSize;
-        public int BlockSize => _blockSize;
-
-        private int _lastBlockSize;
-        public int LastBlockSize => _lastBlockSize;
 
         #endregion
 
+        private SemaphoreSlim _slim = new SemaphoreSlim(1);
         private FileStream _fileStream;
 
         public bool Exists => File.Exists(FullPath);
 
         private BitArray _doneMask;
+        public BitArray DoneMask => _doneMask;
 
         public TorrentFileVM(string directory, TorrentFileInfo fileInfo, bool isDone = false)
         {
-            _relativePath = fileInfo.FilePath;
-            _fullPath = Path.Combine(directory, _relativePath);
-            _fileSize = fileInfo.FileLength;
-            _blocksCount = fileInfo.BlocksCount;
-            _blockSize = fileInfo.BlockSize;
-            _lastBlockSize = fileInfo.LastBlockSize;
+            _torrentFileInfo = fileInfo;
+            _fullPath = Path.Combine(directory, RelativePath);
 
             if (isDone)
             {
-                _doneMask = new BitArray(_blocksCount, true);
+                _doneMask = new BitArray(BlocksCount, true);
                 _received = FileSize;
             }
             else
             {
-                _doneMask = new BitArray(_blocksCount, false);
+                _doneMask = new BitArray(BlocksCount, false);
             }
         }
 
@@ -78,7 +70,123 @@ namespace CNLab4_Client.GUI
             Dispose();
         }
 
-        public async Task<bool> TryCreateEmptyFileAsync()
+        public bool IsDone(int blockIndex)
+        {
+            return _doneMask[blockIndex];
+        }
+
+        /// <returns>null if error</returns>
+        public async Task<byte[]> TryReadAsync(int blockIndex)
+        {
+            try
+            {
+                await _slim.WaitAsync();
+
+                if (!await TryOpenStreamAsync())
+                    return null;
+                return await Task.Run(() =>
+                {
+                    _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                    return _fileStream.ReadBytes(GetBlockSize(blockIndex));
+                });
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                _slim.Release();
+            }
+        }
+
+        public async Task<bool> TryWriteAsync(int blockIndex, byte[] data)
+        {
+            try
+            {
+                await _slim.WaitAsync();
+
+                if (IsDone(blockIndex))
+                {
+                    General.Log($"Block was not written cause it's done already.");
+                    return false;
+                }
+                int currentBlockSize = GetBlockSize(blockIndex);
+                if (data.Length != currentBlockSize)
+                {
+                    General.Log($"Block was not written cause it has wrong length.");
+                    return false;
+                }
+
+                if (!await TryOpenStreamAsync())
+                {
+                    General.Log($"Block was not written cause failed to open file stream.");
+                    return false;
+                }
+
+                await Task.Run(() =>
+                {
+                    _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
+                    _fileStream.Write(data, 0, currentBlockSize);
+                });
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                _slim.Release();
+            }
+
+            Received += data.Length;
+            _doneMask.Set(blockIndex, true);
+            if (Received == FileSize)
+            {
+                try
+                {
+                    await _slim.WaitAsync();
+                    _fileStream.Close();
+                    _fileStream = null;
+                }
+                finally
+                {
+                    _slim.Release();
+                }
+            }
+            return true;
+        }
+
+        private async Task<bool> TryOpenStreamAsync()
+        {
+            try
+            {
+                if (!File.Exists(FullPath))
+                    if (!await TryCreateEmptyFileAsync())
+                        return false;
+
+                if (_fileStream is object && !_fileStream.CanRead)
+                {
+                    _fileStream.Close();
+                    _fileStream = null;
+                }
+
+                if (_fileStream is null)
+                {
+                    if (Received == FileSize)
+                        _fileStream = File.OpenRead(FullPath);
+                    else
+                        _fileStream = File.Open(FullPath, FileMode.Open, FileAccess.ReadWrite);
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> TryCreateEmptyFileAsync()
         {
             try
             {
@@ -91,6 +199,24 @@ namespace CNLab4_Client.GUI
                         fStream.SetLength(FileSize);
                     }
                 });
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryCreateEmptyFile()
+        {
+            try
+            {
+                FileInfo fileInfo = new FileInfo(FullPath);
+                Directory.CreateDirectory(fileInfo.DirectoryName);
+                using (FileStream fStream = new FileStream(fileInfo.FullName, FileMode.OpenOrCreate, FileAccess.Write))
+                {
+                    fStream.SetLength(FileSize);
+                }
                 
                 return true;
             }
@@ -98,122 +224,6 @@ namespace CNLab4_Client.GUI
             {
                 return false;
             }
-            
-        }
-
-        public bool IsDone(int blockIndex)
-        {
-            return _doneMask[blockIndex];
-        }
-
-        /// <returns>null if error</returns>
-        public async Task<byte[]> TryReadAsync(int blockIndex)
-        {
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    if (!TryOpenStream())
-                        return null;
-
-                    lock (_fileStream)
-                    {
-                        _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                        return _fileStream.ReadBytes(GetBlockSize(blockIndex));
-                    }
-                    //using (FileStream fStream = File.Open(FullPath, FileMode.Open, FileAccess.Read))
-                    //{
-                    //    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                    //    return fStream.ReadBytes(GetBlockSize(blockIndex));
-                    //}
-                }
-                catch
-                {
-                    return null;
-                }
-            });
-        }
-
-        public async Task<bool> TryWriteAsync(int blockIndex, byte[] data)
-        {
-            if (IsDone(blockIndex))
-                return false;
-            int currentBlockSize = GetBlockSize(blockIndex);
-            if (data.Length != currentBlockSize)
-                return false;
-
-            bool res = await Task.Run(() =>
-            {
-                try
-                {
-
-                    if (!TryOpenStream())
-                        return false;
-
-                    lock (_fileStream)
-                    {
-                        _fileStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                        _fileStream.Write(data, 0, currentBlockSize);
-                    }
-
-                    //using (FileStream fStream = File.Open(FullPath, FileMode.Open))
-                    //{
-                    //    fStream.Seek((long)BlockSize * blockIndex, SeekOrigin.Begin);
-                    //    fStream.Write(data, 0, currentBlockSize);
-                    //}
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            });
-
-            if (res)
-            {
-                Received += data.Length;
-                _doneMask.Set(blockIndex, true);
-                if (Received == _fileSize)
-                {
-                    lock (_fileStream)
-                    {
-                        _fileStream.Close();
-                        _fileStream = null;
-                    }
-                }
-                return true;
-            }
-            else
-                return false;
-        }
-
-        private bool TryOpenStream()
-        {
-            try
-            {
-                if (_fileStream is object)
-                {
-                    if (!_fileStream.CanRead)
-                    {
-                        _fileStream.Close();
-                        _fileStream = null;
-                    }
-                }
-
-                if (_fileStream is null)
-                {
-                    if (Received == _fileSize)
-                        _fileStream = File.Open(FullPath, FileMode.Open, FileAccess.Read);
-                    else
-                        _fileStream = File.Open(FullPath, FileMode.Open);
-                }
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-            
         }
 
         public int GetBlockSize(int blockIndex)

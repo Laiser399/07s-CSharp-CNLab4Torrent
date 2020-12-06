@@ -23,7 +23,8 @@ namespace CNLab4_Server
         private TcpListener _listener;
         private bool _isStarted = false;
         private Dictionary<string, TorrentInfo> _torrents = new Dictionary<string, TorrentInfo>();
-        private PeersContainer _peersContainer = new PeersContainer();
+        private Dictionary<string, HashSet<IPEndPoint>> _peers = new Dictionary<string, HashSet<IPEndPoint>>();
+        //private PeersContainer _peersContainer = new PeersContainer();
 
         public Server(int port)
         {
@@ -81,10 +82,8 @@ namespace CNLab4_Server
                 return OnRequest(registerTorrent);
             else if (request is GetTorrentInfo getTorrentInfo)
                 return OnRequest(getTorrentInfo);
-            else if (request is GetPeersInfo getPeersInfo)
-                return OnRequest(getPeersInfo);
-            else if (request is BecomePeer becomePeer)
-                return OnRequest(becomePeer);
+            else if (request is GetPeers getPeers)
+                return OnRequest(getPeers);
             else
                 throw new UnknownRequestException();
         }
@@ -106,9 +105,7 @@ namespace CNLab4_Server
             TorrentInfo torrentInfo = new TorrentInfo(request.TorrentName, torrentFilesInfo, accessCode);
 
             _torrents.Add(accessCode, torrentInfo);
-            PeerInfo peerInfo = new PeerInfo(torrentInfo, request.SenderAddress);
-            peerInfo.SetAllBlocksDone();
-            _peersContainer.Add(peerInfo);
+            AddPeer(accessCode, request.SenderAddress);
 
             return new TorrentRegistered
             {
@@ -121,6 +118,7 @@ namespace CNLab4_Server
         {
             if (_torrents.TryGetValue(request.AccessCode, out TorrentInfo torrentInfo))
             {
+                AddPeer(request.AccessCode, request.SenderAddress);
                 return new TorrentInfoResponse { TorrentInfo = torrentInfo };
             }
             else
@@ -129,64 +127,39 @@ namespace CNLab4_Server
             }
         }
 
-        private BaseServerResponse OnRequest(GetPeersInfo request)
+        private BaseServerResponse OnRequest(GetPeers request)
         {
-            if (!_torrents.TryGetValue(request.AccessCode, out TorrentInfo torrentInfo))
+            if (!_torrents.ContainsKey(request.AccessCode))
                 return new Error { Text = "Wrong access code." };
-            if (request.NeedMasks.Count != torrentInfo.FilesInfo.Count)
-                return new Error { Text = "Wrong count of files masks." };
 
-            if (_peersContainer.TryGet(request.AccessCode, out IEnumerable<PeerInfo> infos))
+            if (_peers.TryGetValue(request.AccessCode, out HashSet<IPEndPoint> peers))
             {
-                List<PeersInfoResponse.Info> resultInfos = new List<PeersInfoResponse.Info>();
-                foreach (PeerInfo peerInfo in infos)
-                {
-                    if (request.SenderAddress.Equals(peerInfo.Address))
-                        continue;
-
-                    bool isAnyTrue = false;
-                    BitArray[] resultMasks = new BitArray[peerInfo.FilesState.Length];
-                    for (int i = 0; i < peerInfo.FilesState.Length; ++i)
-                    {
-                        resultMasks[i] = (BitArray)request.NeedMasks[i].Clone();
-                        resultMasks[i].And(peerInfo.FilesState[i]);
-                        isAnyTrue |= resultMasks[i].AtLeastOne(true);
-                    }
-
-                    if (isAnyTrue)
-                    {
-                        resultInfos.Add(new PeersInfoResponse.Info
-                        {
-                            Address = peerInfo.Address,
-                            FilesMasks = resultMasks
-                        });
-                    }  
-                }
-
-                return new PeersInfoResponse { Infos = resultInfos };
+                return new PeersResponse { Peers = peers.ToArray() };
             }
             else
             {
-                return new PeersInfoResponse { Infos = Array.Empty<PeersInfoResponse.Info>() };
+                return new PeersResponse { Peers = Array.Empty<IPEndPoint>() };
             }
         }
 
-        private BaseServerResponse OnRequest(BecomePeer request)
+        private void AddPeer(TorrentInfo torrent, IPEndPoint peer)
         {
-            if (!_torrents.TryGetValue(request.AccessCode, out TorrentInfo torrentInfo))
-                return new Error { Text = "Wrong access code." };
+            AddPeer(torrent.AccessCode, peer);
+        }
 
-            if (!_peersContainer.TryGet(request.AccessCode, request.Address, out PeerInfo peerInfo))
+        private void AddPeer(string accessCode, IPEndPoint peer)
+        {
+            if (_peers.TryGetValue(accessCode, out HashSet<IPEndPoint> peers))
             {
-                peerInfo = new PeerInfo(torrentInfo, request.Address);
-                _peersContainer.Add(peerInfo);
+                if (!peers.Contains(peer))
+                    peers.Add(peer);
             }
-
-            foreach (var block in request.AvailableBlocks)
+            else
             {
-                peerInfo.SetBlockDone(block.FileIndex, block.BlockIndex);
+                peers = new HashSet<IPEndPoint>();
+                peers.Add(peer);
+                _peers.Add(accessCode, peers);
             }
-            return new Ok();
         }
 
         private string GenerateUniqueAccessCode(int minLength)

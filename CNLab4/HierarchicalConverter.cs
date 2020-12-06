@@ -39,7 +39,7 @@ namespace CNLab4
             JObject classObj = obj.Value<JObject>(_objectPropName);
             foreach (Type type in _supportedTypes)
             {
-                if (type.Name == className)
+                if (type.FullName == className)
                 {
                     if (objectType.IsAssignableFrom(type))
                         return classObj.ToObject(type);
@@ -57,7 +57,7 @@ namespace CNLab4
         {
             JObject obj = new JObject(new object[]
             {
-                new JProperty(_classPropName, value.GetType().Name),
+                new JProperty(_classPropName, value.GetType().FullName),
                 new JProperty(_objectPropName, JObject.FromObject(value))
             });
             obj.WriteTo(writer);

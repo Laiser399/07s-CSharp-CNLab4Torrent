@@ -9,14 +9,8 @@ using System.Threading.Tasks;
 
 namespace CNLab4.Messages.Server.Responses
 {
-    public class PeersInfoResponse : BaseServerResponse
+    public class PeersResponse : BaseServerResponse
     {
-        public IList<Info> Infos;
-        
-        public class Info
-        {
-            public IPEndPoint Address;
-            public IList<BitArray> FilesMasks;
-        }
+        public IList<IPEndPoint> Peers;
     }
 }
