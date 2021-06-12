@@ -91,9 +91,9 @@ namespace CNLab4_Client.GUI
                 var dialog = new InputDialog
                 {
                     TitleText = "Access code:",
-                    InputValidator = validator
+                    InputValidator = validator,
+                    Owner = _owner
                 };
-                dialog.Owner = _owner;
                 if (dialog.ShowDialog() == true)
                 {
                     string dir;

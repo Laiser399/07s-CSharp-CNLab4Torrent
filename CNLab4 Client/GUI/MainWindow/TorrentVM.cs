@@ -79,7 +79,7 @@ namespace CNLab4_Client.GUI
             NotifyPropChanged(nameof(ReceiveSpeedStrRepr), nameof(SendSpeedStrRepr));
         }
 
-        private async void ReceiveUntilDoneAsync()
+        private async Task ReceiveUntilDoneAsync()
         {
             List<IPEndPoint> connectedPeers = new List<IPEndPoint>();
             List<Task> receiveTasks = new List<Task>();
@@ -115,7 +115,13 @@ namespace CNLab4_Client.GUI
                     }
 
                     connectedPeers.Add(peer);
-                    Task task = ReceiveFromAsync(peer).ContinueWith(_ => connectedPeers.Remove(peer));
+                    Task task = ReceiveFromAsync(peer).ContinueWith(_ =>
+                    {
+                        lock (connectedPeers)
+                        {
+                            connectedPeers.Remove(peer);
+                        }
+                    });
                     receiveTasks.Add(task);
                 }
 
